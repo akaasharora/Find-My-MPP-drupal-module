@@ -1,0 +1,8 @@
+name: Find my MPP
+description: A module to Find the MPP using postal code or address
+core: 8.x
+package: Custom
+dependencies:
+- node
+- block
+type: module
