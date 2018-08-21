@@ -3,4 +3,12 @@
  * @file
  * Code for the module.
  */
+//function lao_find_my_mpp_theme() {
+//    return array(
+//        'block__findmymppblock' => array(
+//            'variables' => array(),
+//        ),
+//    );
+//}
+
 ?>

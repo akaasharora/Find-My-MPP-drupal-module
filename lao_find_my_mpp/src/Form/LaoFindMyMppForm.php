@@ -14,26 +14,35 @@ class LaoFindMyMppForm extends FormBase{
      * {@inheritdoc}
      */
     public function getFormId() {
-        return 'work_form';
+        return 'lao_find_my_mpp_form';
     }
 
     /**
      * {@inheritdoc}
      */
     public function buildForm(array $form, FormStateInterface $form_state) {
+        $form['#action']='#block-findmymppblock';
+        $session = \Drupal::request()->getSession();
+        $error_message=!empty($session->get('find_mpp_error'))?$session->get('find_mpp_error'):'';
+        //$error_message = !empty($form_state->getValue('find_mpp.error'))?$form_state->getValue('find_mpp.error'):"";
+
+        $form['error'] = array(
+            '#type' => 'markup',
+            '#markup' => $error_message,
+        );
 
         $form['location'] = array(
             '#type' => 'textfield',
             '#title' => t('Enter your postal code or address:'),
             '#required' => TRUE,
         );
-
         $form['actions']['#type'] = 'actions';
         $form['actions']['submit'] = array(
             '#type' => 'submit',
             '#value' => $this->t('Find'),
             '#button_type' => 'primary',
         );
+
         return $form;
     }
 
@@ -41,38 +50,75 @@ class LaoFindMyMppForm extends FormBase{
      * {@inheritdoc}
      */
     public function submitForm(array &$form, FormStateInterface $form_state) {
+        $session =\Drupal::request()->getSession();
+        $error_formatted = "<span class='alert alert-warning'>";
+        $error_formatted .= t('Sorry, we could not find postal code or address.');
+        $error_formatted .= "</span>";
+        $error_formatted .= "<p>";
+        $error_formatted .= t("Try entering your full address, including the province and country, for example <em>111 Wellesley St. West, Toronto, Ontario, Canada</em> or see a full <a href='/en/members/current'>list of current MPPs</a>");
 
         $postal_code = $form_state->getValues()['location'];
         if ($postal_code=='') {
-            drupal_set_message("Cannot be empty! Please enter your Postal Code or Address.");
-
+            //drupal_set_message("Cannot be empty! Please enter your Postal Code or Address.");
+            $form_state->setValue('find_mpp.error', "no");
         }else{
             $operation = $form_state->getValues()['op']->__toString();
             $geo_code = $this->convertPostalToGeo($postal_code);
-            $riding_array = $this->getRiding($geo_code);
-            $riding = $riding_array[0];// Final Riding
-            drupal_set_message("You entered " . $postal_code . ". Your Riding is : " . $riding);
+            if (!empty($geo_code)){
+                $riding_array = $this->getRiding($geo_code);
+                if (!empty($riding_array)){
+                    $riding = $riding_array[0];// Final Riding
+                    if (!empty($riding)){
+                        drupal_set_message("You entered " . $postal_code . ". Your Riding is : " . $riding);
+
+                        $member_ids= $this->getActiveMemberIds();
+
+                        \Drupal::logger("member IDs")->notice(" ". json_encode($member_ids));
+
+                        $member_name_array = $this->buildMemberRidingArray($member_ids,'en');
+
+                        $theId= $this->getID($riding,$member_name_array,$member_ids);//Akaash
+                        if(!empty($theId)){
+                            //drupal_set_message($this->t('You entered: @location ', array('@location ' => $form_state->getValue('location'))));
+                            // drupal_set_message("id:". $theId);
+
+                            $session->set('find_mpp_error',"");
+                            $language = \Drupal::languageManager()->getCurrentLanguage()->getId();
+                            $path = \Drupal::service('path.alias_manager')->getAliasByPath('/node/' . $theId, $language);
+                            $response = new RedirectResponse('/' . $language . $path);
+                            return $response->send();
+                        }else{
+                            // we did not find $member_ids
+                            $session->set('find_mpp_error',$error_formatted);
+                        }
+
+                    }else{
+                        // we did not find a riding
+                        $session->set('find_mpp_error',$error_formatted);
+
+                    }
+                }else{
+                    $session->set('find_mpp_error',$error_formatted);
+                }
+
+
+            }else{
+                // we could not find the geocode
+                $session->set('find_mpp_error',$error_formatted);
+
+            }
+
 
         }
-
-        $member_ids= $this->getActiveMemberIds();
-        \Drupal::logger("member IDs")->notice(" ". json_encode($member_ids));
-
-        $member_name_array = $this->buildMemberRidingArray($member_ids,'en');
-
-        $theId= $this->getID($riding,$member_name_array,$member_ids);//Akaash
-
-        //drupal_set_message($this->t('You entered: @location ', array('@location ' => $form_state->getValue('location'))));
-        drupal_set_message("id:". $theId);
-
-        $language = \Drupal::languageManager()->getCurrentLanguage()->getId();
-        $path = \Drupal::service('path.alias_manager')->getAliasByPath('/node/' . $theId, $language);
-        $response = new RedirectResponse('/' . $language . $path);
-        return $response->send();
 
 
     }
     public function replaceDashes($dash_string){
+        /**
+         * This function replaces the en dash(-) and em dash(—) in riding name with a space.
+         * This is done to compare the riding name from Open North's database and our database.
+         */
+
         $dash_string = str_replace('—',' ', $dash_string);
         $dash_string = str_replace('-',' ',$dash_string);
 
@@ -142,7 +188,7 @@ class LaoFindMyMppForm extends FormBase{
                 \Drupal::logger("member being processed")->notice("something went wrong");
             }
         }
-        return $member_array;//Akaash
+        return $member_array;
     }
 
 
@@ -161,18 +207,37 @@ class LaoFindMyMppForm extends FormBase{
     }
 
     public function convertPostalToGeo($postal_code) {
-        // code
+
+        /**
+         *
+         * This function will get the values from the text field and convert them into geocode.
+         * this will be achieved by using Google's Geocode API.
+         * Example - https://maps.googleapis.com/maps/api/geocode/json?address=m5v1b1&key=AIzaSyD0FH0qHadaGu0z63zzfCd_i0Mgb1KCzgU
+         * From here we will get Latitude and Longitude.
+         *
+         */
         $address = urlencode($postal_code);
         $key ='AIzaSyD0FH0qHadaGu0z63zzfCd_i0Mgb1KCzgU';
         $geoQuery = 'https://maps.googleapis.com/maps/api/geocode/json?address='.$address.'&key='.$key;
         $content = file_get_contents($geoQuery);
         $content_array = json_decode($content,true);
-        $lat = $content_array['results'][0]['geometry']['location']['lat'];
-        $lng = $content_array['results'][0]['geometry']['location']['lng'];
-        $ret = 'Lat:' . $lat . " Lng: ". $lng;
-        return $lat.','.$lng ;
+        if (isset( $content_array['results'][0])) {
+            $lat = $content_array['results'][0]['geometry']['location']['lat'];
+            $lng = $content_array['results'][0]['geometry']['location']['lng'];
+            $ret = 'Lat:' . $lat . " Lng: " . $lng;
+            return $lat . ',' . $lng;
+        }else{
+            return null;
+        }
     }
     public function getRiding($geo_code){
+
+        /**
+         * This function finds the riding associated with the geocode.
+         * This is achived by sending the requesst to Open North's API
+         * Example - https://represent.opennorth.ca/boundaries/?contains=43.7733946,-79.4940824
+         */
+
         $contains = urlencode($geo_code);
         $openNorthQuery = 'http://represent.opennorth.ca/boundaries/?contains=' . $contains;
         $query_content = file_get_contents($openNorthQuery);

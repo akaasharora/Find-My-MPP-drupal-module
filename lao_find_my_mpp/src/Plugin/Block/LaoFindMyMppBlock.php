@@ -15,7 +15,7 @@ use Drupal\Core\Form\FormInterface;
  * @Block(
  *  id = "lao_find_my_mpp",
  *  admin_label = @Translation("Find your MPP "),
- *  category = @Translation("Custom Find My MPP block")
+ *  category = @Translation("Custom Find My MPP ")
  * )
  */
 class LaoFindMyMppBlock extends BlockBase{
