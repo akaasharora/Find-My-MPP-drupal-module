@@ -67,7 +67,7 @@ class LaoFindMyMppForm extends FormBase{
             if (!empty($geo_code)){
                 $riding_array = $this->getRiding($geo_code);
                 if (!empty($riding_array)){
-                    $riding = $riding_array[0];// Final Riding
+                    $riding = $riding_array[0];// Final Riding - this is the correct riding from open north API
                     if (!empty($riding)){
                         drupal_set_message("You entered " . $postal_code . ". Your Riding is : " . $riding);
 
@@ -117,6 +117,7 @@ class LaoFindMyMppForm extends FormBase{
         /**
          * This function replaces the en dash(-) and em dash(—) in riding name with a space.
          * This is done to compare the riding name from Open North's database and our database.
+         * example: comparing Spadina—Fort York and Spadina-Fort York.
          */
 
         $dash_string = str_replace('—',' ', $dash_string);
