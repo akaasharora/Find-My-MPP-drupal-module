@@ -218,7 +218,7 @@ class LaoFindMyMppForm extends FormBase{
          *
          */
         $address = urlencode($postal_code);
-        $key ='AIzaSyD0FH0qHadaGu0z63zzfCd_i0Mgb1KCzgU';
+        $key ='AIzaSyD0FH0qHadaGu0z63zzfCd_i0Mgb1KCzgU';// API key from Assembly's account will go here For more infor mation refer to'Find My MPP -Google Geocode API-FAQs.docx' in DocSafe
         $geoQuery = 'https://maps.googleapis.com/maps/api/geocode/json?address='.$address.'&key='.$key;
         $content = file_get_contents($geoQuery);
         $content_array = json_decode($content,true);
